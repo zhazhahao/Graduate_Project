@@ -1,0 +1,4 @@
+# 忽略整个 data 文件夹及其内容
+data/ 
+checkpoints/
+logs/
