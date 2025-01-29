@@ -1,228 +1,198 @@
-import os
-import argparse
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from torchvision import transforms
-from torch.utils.tensorboard import SummaryWriter
+from torchvision.transforms import transforms
+from datasets.Reid_Dataloader import ReidDataLoader
 from models.resnet_cbam import ResNet50_CBAM
-from utils.losses import CombinedLoss
-from torchvision.datasets import ImageFolder
-import numpy as np
-from tqdm import tqdm
+from torch.nn.functional import normalize
+import random
 
 
-def train(args):
-    # 设置随机种子
-    torch.manual_seed(args.seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed(args.seed)
-
-    # 数据预处理
-    train_transform = transforms.Compose([
-        transforms.Resize((256, 128)),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
-
-    val_transform = transforms.Compose([
-        transforms.Resize((256, 128)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
-
-    # 加载数据集
-    train_dataset = ImageFolder(os.path.join(args.data_dir, 'train'), transform=train_transform)
-    val_dataset = ImageFolder(os.path.join(args.data_dir, 'val'), transform=val_transform)
-
-    train_loader = DataLoader(
-        train_dataset, batch_size=args.batch_size, shuffle=True,
-        num_workers=args.workers, pin_memory=True
-    )
-
-    val_loader = DataLoader(
-        val_dataset, batch_size=args.batch_size, shuffle=False,
-        num_workers=args.workers, pin_memory=True
-    )
-
-    # 创建模型
-    model = ResNet50_CBAM(num_classes=len(train_dataset.classes), use_cbam=True)
-    if args.resume:
-        checkpoint = torch.load(args.resume)
-        model.load_state_dict(checkpoint['state_dict'])
-
-    model = model.cuda() if torch.cuda.is_available() else model
-
-    # 定义损失函数和优化器
-    criterion = CombinedLoss(
-        num_classes=len(train_dataset.classes),
-        margin=args.margin,
-        epsilon=args.epsilon,
-        lambda_ce=args.lambda_ce,
-        lambda_tri=args.lambda_tri
-    )
-    
-    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_step, gamma=0.1)
-
-    # TensorBoard
-    writer = SummaryWriter(args.logs_dir)
-
-    # 开始训练
-    best_acc = 0
-    for epoch in range(args.start_epoch, args.epochs):
-        # 训练
-        train_loss, train_acc = train_epoch(
-            train_loader, model, criterion, optimizer, epoch, writer
-        )
-
-        # 验证
-        val_loss, val_acc = validate(val_loader, model, criterion, epoch, writer)
-
-        scheduler.step()
-
-        # 保存最佳模型
-        is_best = val_acc > best_acc
-        best_acc = max(val_acc, best_acc)
-        
-        state = {
-            'epoch': epoch + 1,
-            'state_dict': model.state_dict(),
-            'best_acc': best_acc,
-            'optimizer': optimizer.state_dict(),
-        }
-        
-        filename = os.path.join(args.checkpoints_dir, f'checkpoint_epoch_{epoch+1}.pth')
-        torch.save(state, filename)
-        if is_best:
-            best_file = os.path.join(args.checkpoints_dir, 'model_best.pth')
-            torch.save(state, best_file)
-
-        print(f'Epoch: [{epoch+1}/{args.epochs}]\t'
-              f'Train Loss: {train_loss:.4f}\t'
-              f'Train Acc: {train_acc:.2f}%\t'
-              f'Val Loss: {val_loss:.4f}\t'
-              f'Val Acc: {val_acc:.2f}%')
-
-    writer.close()
+def validate_pid_range(pids, num_classes):
+    """Validate PID values are in [0, num_classes-1] range"""
+    if pids.min() < 0 or pids.max() >= num_classes:
+        raise ValueError(f"Invalid PID range detected: min={pids.min()}, max={pids.max()} "
+                         f"(should be in [0, {num_classes - 1}])")
 
 
-def train_epoch(train_loader, model, criterion, optimizer, epoch, writer):
+def generate_triplets(features, labels):
+    """
+    Generate triplets (anchor, positive, negative) for triplet loss.
+    :param features: Tensor of shape (batch_size, feature_dim).
+    :param labels: Tensor of shape (batch_size,).
+    :return: Triplets (anchor, positive, negative).
+    """
+    triplets = []
+    for i in range(len(labels)):
+        anchor = features[i]
+        label = labels[i]
+
+        # Find positive samples (same label but different instance)
+        positive_mask = (labels == label)
+        positive_mask[i] = False  # Exclude self
+        positive_indices = positive_mask.nonzero(as_tuple=True)[0]
+
+        # Find negative samples
+        negative_indices = (labels != label).nonzero(as_tuple=True)[0]
+
+        if len(positive_indices) > 0 and len(negative_indices) > 0:
+            positive = features[random.choice(positive_indices)]
+            negative = features[random.choice(negative_indices)]
+            triplets.append((anchor, positive, negative))
+
+    if triplets:
+        return [torch.stack(x) for x in zip(*triplets)]
+    return None, None, None
+
+
+def train_one_epoch(model, dataloader, ce_criterion, triplet_criterion, optimizer, device, num_classes):
     model.train()
-    total_loss = 0
-    correct = 0
-    total = 0
+    total_loss = 0.0
+    total_ce_loss = 0.0
+    total_triplet_loss = 0.0
 
-    for i, (inputs, targets) in enumerate(tqdm(train_loader, desc=f'Epoch {epoch+1}')):
-        if torch.cuda.is_available():
-            inputs, targets = inputs.cuda(), targets.cuda()
+    for imgs, pids, _ in dataloader:
+        imgs, pids = imgs.to(device), pids.to(device)
 
-        # 前向传播
-        outputs, features = model(inputs)
-        loss, loss_ce, loss_tri = criterion(outputs, features, targets)
+        # Validate PID range before processing
+        validate_pid_range(pids, num_classes)
 
-        # 反向传播和优化
+        # Forward pass
+        outputs, features = model(imgs)
+        ce_loss = ce_criterion(outputs, pids)
+
+        # Normalize features for triplet loss
+        features = normalize(features, p=2, dim=1)
+        anchor, positive, negative = generate_triplets(features, pids)
+
+        triplet_loss = torch.tensor(0.0, device=device)
+        if anchor is not None:
+            triplet_loss = triplet_criterion(anchor, positive, negative)
+
+        # Combine losses
+        loss = ce_loss + triplet_loss
+
+        # Backward pass and optimization
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
-        # 统计
-        total_loss += loss.item()
-        _, predicted = outputs.max(1)
-        total += targets.size(0)
-        correct += predicted.eq(targets).sum().item()
+        total_loss += loss.item() * imgs.size(0)
+        total_ce_loss += ce_loss.item() * imgs.size(0)
+        total_triplet_loss += triplet_loss.item() * imgs.size(0)
 
-        # 记录到TensorBoard
-        step = epoch * len(train_loader) + i
-        writer.add_scalar('Train/Loss', loss.item(), step)
-        writer.add_scalar('Train/CE_Loss', loss_ce.item(), step)
-        writer.add_scalar('Train/Triplet_Loss', loss_tri.item(), step)
+    avg_loss = total_loss / len(dataloader.dataset)
+    avg_ce_loss = total_ce_loss / len(dataloader.dataset)
+    avg_triplet_loss = total_triplet_loss / len(dataloader.dataset)
 
-    acc = 100. * correct / total
-    avg_loss = total_loss / len(train_loader)
-    return avg_loss, acc
+    return avg_loss, avg_ce_loss, avg_triplet_loss
 
 
-def validate(val_loader, model, criterion, epoch, writer):
+def validate(model, dataloader, ce_criterion, triplet_criterion, device, num_classes):
     model.eval()
-    total_loss = 0
+    total_loss = 0.0
+    total_ce_loss = 0.0
+    total_triplet_loss = 0.0
     correct = 0
-    total = 0
 
     with torch.no_grad():
-        for i, (inputs, targets) in enumerate(tqdm(val_loader, desc='Validation')):
-            if torch.cuda.is_available():
-                inputs, targets = inputs.cuda(), targets.cuda()
+        for imgs, pids, _ in dataloader:
+            imgs, pids = imgs.to(device), pids.to(device)
 
-            # 前向传播
-            outputs, features = model(inputs)
-            loss, _, _ = criterion(outputs, features, targets)
+            # Validate PID range
+            validate_pid_range(pids, num_classes)
 
-            # 统计
-            total_loss += loss.item()
-            _, predicted = outputs.max(1)
-            total += targets.size(0)
-            correct += predicted.eq(targets).sum().item()
+            # Forward pass
+            outputs, features = model(imgs)
+            ce_loss = ce_criterion(outputs, pids)
 
-    # 计算准确率和平均损失
-    acc = 100. * correct / total
-    avg_loss = total_loss / len(val_loader)
+            # Normalize features for triplet loss
+            features = normalize(features, p=2, dim=1)
+            anchor, positive, negative = generate_triplets(features, pids)
 
-    # 记录到TensorBoard
-    writer.add_scalar('Val/Loss', avg_loss, epoch)
-    writer.add_scalar('Val/Accuracy', acc, epoch)
+            triplet_loss = torch.tensor(0.0, device=device)
+            if anchor is not None:
+                triplet_loss = triplet_criterion(anchor, positive, negative)
 
-    return avg_loss, acc
+            # Combine losses
+            loss = ce_loss + triplet_loss
+
+            total_loss += loss.item() * imgs.size(0)
+            total_ce_loss += ce_loss.item() * imgs.size(0)
+            total_triplet_loss += triplet_loss.item() * imgs.size(0)
+
+            # Calculate accuracy
+            _, preds = torch.max(outputs, 1)
+            correct += (preds == pids).sum().item()
+
+    avg_loss = total_loss / len(dataloader.dataset)
+    avg_ce_loss = total_ce_loss / len(dataloader.dataset)
+    avg_triplet_loss = total_triplet_loss / len(dataloader.dataset)
+    accuracy = correct / len(dataloader.dataset)
+
+    return avg_loss, avg_ce_loss, avg_triplet_loss, accuracy
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Train ReID Model')
-    # 数据集参数
-    parser.add_argument('--data-dir', type=str, default='./data',
-                        help='path to dataset')
-    parser.add_argument('--workers', type=int, default=4,
-                        help='number of data loading workers')
-    
-    # 训练参数
-    parser.add_argument('--epochs', type=int, default=60,
-                        help='number of total epochs to run')
-    parser.add_argument('--start-epoch', type=int, default=0,
-                        help='manual epoch number (useful on restarts)')
-    parser.add_argument('--batch-size', type=int, default=32,
-                        help='mini-batch size')
-    parser.add_argument('--lr', type=float, default=3e-4,
-                        help='initial learning rate')
-    parser.add_argument('--weight-decay', type=float, default=5e-4,
-                        help='weight decay')
-    parser.add_argument('--lr-step', type=int, default=20,
-                        help='step size for learning rate decay')
-    
-    # 损失函数参数
-    parser.add_argument('--margin', type=float, default=0.3,
-                        help='margin for triplet loss')
-    parser.add_argument('--epsilon', type=float, default=0.1,
-                        help='smoothing epsilon for label smooth')
-    parser.add_argument('--lambda-ce', type=float, default=1.0,
-                        help='weight for cross entropy loss')
-    parser.add_argument('--lambda-tri', type=float, default=1.0,
-                        help='weight for triplet loss')
-    
-    # 其他参数
-    parser.add_argument('--seed', type=int, default=42,
-                        help='random seed')
-    parser.add_argument('--resume', type=str, default='',
-                        help='path to checkpoint')
-    parser.add_argument('--checkpoints-dir', type=str, default='./checkpoints',
-                        help='path to checkpoints')
-    parser.add_argument('--logs-dir', type=str, default='./logs',
-                        help='path to tensorboard logs')
+def main():
+    # Configurations
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    root_dir = "./data"
+    dataset_name = "market1501"
+    batch_size = 32
+    num_epochs = 40
+    learning_rate = 0.001
+    weight_decay = 5e-4
+    margin = 1.0
+    num_classes = 751  # Market1501 has 751 unique person IDs (0-750)
 
-    args = parser.parse_args()
+    # Data loaders (需要确保ReidDataLoader正确转换PID到0-750范围)
+    dataloader_train = ReidDataLoader(
+        dataset_name=dataset_name,
+        root_dir=root_dir,
+        batch_size=batch_size,
+        mode='train',
+        num_classes=num_classes  # 确保数据加载器知道类别数
+    ).get_dataloader()
 
-    # 创建必要的目录
-    os.makedirs(args.checkpoints_dir, exist_ok=True)
-    os.makedirs(args.logs_dir, exist_ok=True)
+    dataloader_val = ReidDataLoader(
+        dataset_name=dataset_name,
+        root_dir=root_dir,
+        batch_size=batch_size,
+        mode='test',
+        num_classes=num_classes
+    ).get_dataloader()
 
-    train(args) 
+    # Model setup
+    model = ResNet50_CBAM(num_classes=num_classes).to(device)
+
+    # Loss and optimizer
+    ce_criterion = nn.CrossEntropyLoss()
+    triplet_criterion = nn.TripletMarginLoss(margin=margin, p=2)
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
+
+    # Training loop
+    best_accuracy = 0.0
+    for epoch in range(num_epochs):
+        train_loss, train_ce_loss, train_triplet_loss = train_one_epoch(
+            model, dataloader_train, ce_criterion, triplet_criterion, optimizer, device, num_classes
+        )
+        val_loss, val_ce_loss, val_triplet_loss, val_accuracy = validate(
+            model, dataloader_val, ce_criterion, triplet_criterion, device, num_classes
+        )
+
+        scheduler.step()
+
+        print(f"\nEpoch [{epoch + 1}/{num_epochs}]")
+        print(f"Train Loss: {train_loss:.4f} (CE: {train_ce_loss:.4f}, Triplet: {train_triplet_loss:.4f})")
+        print(f"Val Loss: {val_loss:.4f} (CE: {val_ce_loss:.4f}, Triplet: {val_triplet_loss:.4f})")
+        print(f"Val Accuracy: {val_accuracy:.2%}")
+
+        torch.save(model.state_dict(), "latest_model.pth")
+
+    print(f"\nTraining completed.")
+
+
+if __name__ == "__main__":
+    main()
