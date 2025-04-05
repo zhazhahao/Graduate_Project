@@ -1,0 +1,21 @@
+Training Summary
+==================================================
+
+CBAM Model:
+------------------------------
+Best Validation Accuracy: 90.56% (Epoch 6)
+Best Training Accuracy: 91.45%
+Final Training Accuracy: 87.82%
+Final Validation Accuracy: 74.34%
+Final Training Loss: 0.6117
+Final Validation Loss: 0.8574
+
+LGCA Model:
+------------------------------
+Best Validation Accuracy: 89.42% (Epoch 7)
+Best Training Accuracy: 90.79%
+Final Training Accuracy: 78.96%
+Final Validation Accuracy: 65.41%
+Final Training Loss: 1.4898
+Final Validation Loss: 1.0255
+

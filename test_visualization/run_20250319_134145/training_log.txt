@@ -1,0 +1,273 @@
+Training started at 20250319_134145
+==================================================
+
+
+Epoch 0:
+------------------------------
+
+CBAM:
+Training:
+  Loss: 0.9255
+  Accuracy: 79.86%
+  CE Loss: 0.9104
+  Triplet Loss: 0.3629
+Validation:
+  Loss: 1.6477
+  Accuracy: 61.77%
+  CE Loss: 0.6038
+  Triplet Loss: 0.6006
+
+LGCA:
+Training:
+  Loss: 0.9824
+  Accuracy: 83.59%
+  CE Loss: 1.2296
+  Triplet Loss: 0.2469
+Validation:
+  Loss: 1.9460
+  Accuracy: 62.97%
+  CE Loss: 0.7716
+  Triplet Loss: 0.3070
+
+Epoch 1:
+------------------------------
+
+CBAM:
+Training:
+  Loss: 1.2485
+  Accuracy: 65.56%
+  CE Loss: 0.7100
+  Triplet Loss: 0.6660
+Validation:
+  Loss: 1.2376
+  Accuracy: 77.92%
+  CE Loss: 0.9293
+  Triplet Loss: 0.9804
+
+LGCA:
+Training:
+  Loss: 0.9328
+  Accuracy: 75.47%
+  CE Loss: 0.4088
+  Triplet Loss: 0.6240
+Validation:
+  Loss: 0.6341
+  Accuracy: 66.29%
+  CE Loss: 0.7668
+  Triplet Loss: 0.7430
+
+Epoch 2:
+------------------------------
+
+CBAM:
+Training:
+  Loss: 1.9141
+  Accuracy: 81.23%
+  CE Loss: 0.4890
+  Triplet Loss: 0.4122
+Validation:
+  Loss: 1.1773
+  Accuracy: 63.25%
+  CE Loss: 1.2817
+  Triplet Loss: 0.3784
+
+LGCA:
+Training:
+  Loss: 1.9763
+  Accuracy: 86.52%
+  CE Loss: 0.9418
+  Triplet Loss: 0.2233
+Validation:
+  Loss: 0.5691
+  Accuracy: 88.14%
+  CE Loss: 0.7024
+  Triplet Loss: 0.2323
+
+Epoch 3:
+------------------------------
+
+CBAM:
+Training:
+  Loss: 0.6108
+  Accuracy: 74.10%
+  CE Loss: 0.6255
+  Triplet Loss: 0.4849
+Validation:
+  Loss: 0.9954
+  Accuracy: 60.37%
+  CE Loss: 0.4743
+  Triplet Loss: 0.7355
+
+LGCA:
+Training:
+  Loss: 0.8199
+  Accuracy: 90.79%
+  CE Loss: 0.9310
+  Triplet Loss: 0.5885
+Validation:
+  Loss: 1.2162
+  Accuracy: 87.20%
+  CE Loss: 0.9000
+  Triplet Loss: 0.3960
+
+Epoch 4:
+------------------------------
+
+CBAM:
+Training:
+  Loss: 0.6932
+  Accuracy: 91.45%
+  CE Loss: 1.3504
+  Triplet Loss: 0.4301
+Validation:
+  Loss: 0.6047
+  Accuracy: 82.73%
+  CE Loss: 0.9260
+  Triplet Loss: 0.4987
+
+LGCA:
+Training:
+  Loss: 1.0508
+  Accuracy: 78.72%
+  CE Loss: 0.4838
+  Triplet Loss: 0.3377
+Validation:
+  Loss: 1.4858
+  Accuracy: 66.57%
+  CE Loss: 1.3224
+  Triplet Loss: 0.7601
+
+Epoch 5:
+------------------------------
+
+CBAM:
+Training:
+  Loss: 1.5005
+  Accuracy: 86.57%
+  CE Loss: 0.8293
+  Triplet Loss: 0.9705
+Validation:
+  Loss: 1.4313
+  Accuracy: 90.56%
+  CE Loss: 0.3085
+  Triplet Loss: 0.9484
+
+LGCA:
+Training:
+  Loss: 0.9718
+  Accuracy: 66.68%
+  CE Loss: 0.3202
+  Triplet Loss: 0.7823
+Validation:
+  Loss: 0.8295
+  Accuracy: 64.41%
+  CE Loss: 0.9302
+  Triplet Loss: 0.4976
+
+Epoch 6:
+------------------------------
+
+CBAM:
+Training:
+  Loss: 1.4318
+  Accuracy: 64.09%
+  CE Loss: 0.3564
+  Triplet Loss: 0.4308
+Validation:
+  Loss: 0.7279
+  Accuracy: 68.79%
+  CE Loss: 0.7916
+  Triplet Loss: 0.7416
+
+LGCA:
+Training:
+  Loss: 1.7921
+  Accuracy: 66.02%
+  CE Loss: 1.2549
+  Triplet Loss: 0.2391
+Validation:
+  Loss: 1.6342
+  Accuracy: 89.42%
+  CE Loss: 0.9195
+  Triplet Loss: 0.4728
+
+Epoch 7:
+------------------------------
+
+CBAM:
+Training:
+  Loss: 1.0503
+  Accuracy: 62.19%
+  CE Loss: 1.0652
+  Triplet Loss: 0.6706
+Validation:
+  Loss: 1.8493
+  Accuracy: 82.88%
+  CE Loss: 1.2082
+  Triplet Loss: 0.4908
+
+LGCA:
+Training:
+  Loss: 0.9798
+  Accuracy: 73.38%
+  CE Loss: 1.3857
+  Triplet Loss: 0.3726
+Validation:
+  Loss: 0.8867
+  Accuracy: 67.56%
+  CE Loss: 0.3764
+  Triplet Loss: 0.9188
+
+Epoch 8:
+------------------------------
+
+CBAM:
+Training:
+  Loss: 1.6143
+  Accuracy: 67.82%
+  CE Loss: 1.1349
+  Triplet Loss: 0.5425
+Validation:
+  Loss: 0.6598
+  Accuracy: 63.35%
+  CE Loss: 1.0980
+  Triplet Loss: 0.7171
+
+LGCA:
+Training:
+  Loss: 0.8220
+  Accuracy: 89.21%
+  CE Loss: 1.0173
+  Triplet Loss: 0.6925
+Validation:
+  Loss: 1.0580
+  Accuracy: 87.79%
+  CE Loss: 1.1625
+  Triplet Loss: 0.6951
+
+Epoch 9:
+------------------------------
+
+CBAM:
+Training:
+  Loss: 0.6117
+  Accuracy: 87.82%
+  CE Loss: 0.6609
+  Triplet Loss: 0.9116
+Validation:
+  Loss: 0.8574
+  Accuracy: 74.34%
+  CE Loss: 0.5538
+  Triplet Loss: 0.9972
+
+LGCA:
+Training:
+  Loss: 1.4898
+  Accuracy: 78.96%
+  CE Loss: 1.4580
+  Triplet Loss: 0.5404
+Validation:
+  Loss: 1.0255
+  Accuracy: 65.41%
+  CE Loss: 1.2247
+  Triplet Loss: 0.8464
